@@ -1,0 +1,11 @@
+# chain3: 3-bone chain, root angle sweeps 0 -> 1 rad linearly over [0,1]s,
+# children rigid (local x=1). Hermite tangents 1 at both ends make ang(t)==t.
+# bone <parent> <rest_x> <rest_y> <rest_ang>
+bone -1 0 0 0
+bone 0 1 0 0
+bone 1 1 0 0
+# key <bone> <x|y|ang> <t> <v> <tan_in> <tan_out>
+key 0 ang 0 0 0 1
+key 0 ang 1 1 1 0
+# frames <count> <dt> <t0>
+frames 11 0.1 0

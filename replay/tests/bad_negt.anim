@@ -1,0 +1,4 @@
+# invalid: negative key time must be rejected
+bone -1 0 0 0
+key 0 ang -0.5 0 0 0
+frames 4 0.1 0
