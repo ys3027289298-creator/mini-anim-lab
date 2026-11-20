@@ -1,0 +1,13 @@
+# TSan suppression file for palette.
+#
+# The palette is a seqlock: the writer builds the back buffer while render
+# readers may be snapshotting the other buffer, and the sequence counter +
+# checksum detect any overlap so a torn snapshot is retried, never returned.
+# TSan cannot model seqlocks and reports the deliberately overlapping
+# payload accesses as races. The remaining races are all writer->reader
+# payload pairs inside these three functions; every shared scalar (front
+# index, sequence, stats) is accessed atomically, and acquire/release
+# annotations cover the consistent-snapshot path. Suppress only these sites.
+race:palette_update
+race:palette_read_end
+race:palette_read_copy
