@@ -1,0 +1,7 @@
+# build products of each module's `make`
+/audit/audit
+/constraint/constraint
+/skeleton/skeleton
+/ik/ik
+/path/path
+/curve/curve
