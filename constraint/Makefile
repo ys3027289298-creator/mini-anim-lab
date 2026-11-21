@@ -10,4 +10,4 @@ test: constraint
 	./constraint
 
 clean:
-	rm -f constraint
+	rm -rf constraint out
