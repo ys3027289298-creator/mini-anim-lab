@@ -1,0 +1,3 @@
+# path
+
+`make test` 跑自检。
