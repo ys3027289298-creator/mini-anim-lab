@@ -1,0 +1,9 @@
+reachable=1
+joint_on_circle=1
+end_matches=1
+pole_up=1
+pole_down=1
+unreachable=1
+too_close=1
+zero_len=1
+all_ok=1

@@ -1,7 +1,10 @@
 
 /* ik: analytic two-bone IK with pole vector and joint angle limits. */
+#define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
+#include "../../shared/pose_export.h"
 
 typedef struct { float x, y; } V2;
 
@@ -51,7 +54,98 @@ static void check(const char* name, int ok) {
     if (!ok) failures++;
 }
 
-int main(void) {
+/* ---------- unified pose export (new format, see shared/pose_export.h) ----- */
+
+/* canonical pose: two unit bones reaching (1.4, 0.4), pole points up */
+static IkResult ik_pose_solve(void) {
+    V2 root = { 0.0f, 0.0f };
+    V2 target = { 1.4f, 0.4f };
+    V2 pole = { 0.0f, 1.0f };
+    return solve_two_bone(root, target, 1.0f, 1.0f, pole);
+}
+
+static int ik_pose_export(const char* outdir, int argc, char** argv) {
+    if (pe_mkdir_p(outdir) != 0) return 2;
+
+    /* timing tier 1: pose numeric computation, 1000 repeats */
+    IkResult r;
+    long t0 = pe_now_us();
+    for (int rep = 0; rep < 1000; rep++) {
+        r = ik_pose_solve();
+        if (r.a1 + r.a2 > 1e30f) return 2;
+    }
+    long t1 = pe_now_us();
+    long compute_us = t1 - t0;
+
+    /* timing tier 2: image rendering, single pass */
+    V2 root = { 0.0f, 0.0f };
+    V2 target = { 1.4f, 0.4f };
+    PeCanvas cv;
+    pe_canvas_init(&cv, -0.5f, -1.2f, 2.0f, 1.2f);
+    long t2 = pe_now_us();
+    pe_line(&cv, root.x, root.y, r.joint.x, r.joint.y, 40, 90, 180);
+    pe_line(&cv, r.joint.x, r.joint.y, target.x, target.y, 40, 90, 180);
+    pe_circle(&cv, root.x, root.y, 0.06f, 90, 90, 90);
+    pe_circle(&cv, r.joint.x, r.joint.y, 0.06f, 200, 60, 60);
+    pe_circle(&cv, target.x, target.y, 0.06f, 60, 160, 80);
+    long t3 = pe_now_us();
+    long render_us = t3 - t2;
+
+    char ppm_path[600], json_path[600];
+    snprintf(ppm_path, sizeof(ppm_path), "%s/pose.ppm", outdir);
+    snprintf(json_path, sizeof(json_path), "%s/pose.json", outdir);
+    if (pe_canvas_save(&cv, ppm_path) != 0) return 2;
+
+    char hash[65];
+    if (pe_sha256_file(ppm_path, hash) != 0) return 2;
+
+    FILE* f = fopen(json_path, "wb");
+    if (!f) return 2;
+    fprintf(f, "{\n");
+    fprintf(f, "  \"module\": \"ik\",\n");
+    fprintf(f, "  \"format_version\": %d,\n", POSE_FORMAT_VERSION);
+    fprintf(f, "  \"pose\": {\n");
+    fprintf(f, "    \"root\": {\"x\": %.6f, \"y\": %.6f},\n", root.x, root.y);
+    fprintf(f, "    \"target\": {\"x\": %.6f, \"y\": %.6f},\n", target.x, target.y);
+    fprintf(f, "    \"ok\": %d,\n", r.ok);
+    fprintf(f, "    \"joint\": {\"x\": %.6f, \"y\": %.6f},\n", r.joint.x, r.joint.y);
+    fprintf(f, "    \"angle1\": %.6f,\n", r.a1);
+    fprintf(f, "    \"angle2\": %.6f\n", r.a2);
+    fprintf(f, "  },\n");
+    fprintf(f, "  \"image\": {\n");
+    fprintf(f, "    \"file\": \"pose.ppm\",\n");
+    fprintf(f, "    \"format\": \"ppm-p6\",\n");
+    fprintf(f, "    \"width\": %d,\n", POSE_CANVAS_W);
+    fprintf(f, "    \"height\": %d,\n", POSE_CANVAS_H);
+    fprintf(f, "    \"sha256\": \"%s\"\n", hash);
+    fprintf(f, "  },\n");
+    fprintf(f, "  \"timing\": {\n");
+    fprintf(f, "    \"compute_pose_us\": %ld,\n", compute_us);
+    fprintf(f, "    \"compute_repeats\": 1000,\n");
+    fprintf(f, "    \"render_image_us\": %ld\n", render_us);
+    fprintf(f, "  },\n");
+    fprintf(f, "  \"reproduce\": ");
+    fputc('[', f);
+    for (int i = 0; i < argc; i++) {
+        pe_write_json_string(f, argv[i]);
+        fputs(i == argc - 1 ? "" : ", ", f);
+    }
+    fputs("],\n", f);
+    fprintf(f, "  \"reproduce_hint\": \"run the command above from the repository root\"\n");
+    fprintf(f, "}\n");
+    fclose(f);
+    return 0;
+}
+
+int main(int argc, char** argv) {
+    if (strcmp(argc > 1 ? argv[1] : "", "--pose-export") == 0) {
+        if (argc != 3) {
+            fprintf(stderr, "usage: %s --pose-export <outdir>\n", argv[0]);
+            return 2;
+        }
+        return ik_pose_export(argv[2], argc, argv);
+    }
+
     V2 root = { 0, 0 }, target = { 1, 0 }, pole = { 0, 1 };
     IkResult r = solve_two_bone(root, target, 1.0f, 1.0f, pole);
     check("reachable", r.ok == 1);

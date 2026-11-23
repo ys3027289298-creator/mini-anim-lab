@@ -1,0 +1,14 @@
+add0=1
+add1=1
+add2=1
+total_len=1
+sample_mid=1
+sample_corner=1
+sample_end=1
+sample_out=1
+dup_rejected=1
+closest_dist=1
+closest_s=1
+curvature_straight=1
+curvature_turn=1
+all_ok=1

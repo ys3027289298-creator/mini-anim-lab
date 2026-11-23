@@ -1,8 +1,10 @@
 
 /* skeleton: bone hierarchy, world transforms and skinning matrix assembly. */
+#define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include "../../shared/pose_export.h"
 
 #define MAX_BONES 16
 
@@ -63,7 +65,108 @@ static void check(const char* name, int ok) {
     if (!ok) failures++;
 }
 
-int main(void) {
+/* ---------- unified pose export (new format, see shared/pose_export.h) ----- */
+
+/* canonical pose: 3-bone chain with root rotated 90 degrees */
+static void skeleton_pose_build(Skeleton* s) {
+    skel_init(s);
+    int root = skel_add(s, -1, 0.0f, 0.0f, 1.5707963f);
+    int b1 = skel_add(s, root, 1.0f, 0.0f, 0.0f);
+    int b2 = skel_add(s, b1, 1.0f, 0.0f, 0.0f);
+    (void)b2;
+    skel_update(s);
+}
+
+static int skeleton_pose_export(const char* outdir, int argc, char** argv) {
+    if (pe_mkdir_p(outdir) != 0) return 2;
+
+    /* timing tier 1: pose numeric computation, 1000 repeats */
+    Skeleton s;
+    long t0 = pe_now_us();
+    for (int rep = 0; rep < 1000; rep++) {
+        skeleton_pose_build(&s);
+        /* touch results so the loop cannot be optimized away */
+        if (s.world[s.count - 1].x + s.world[s.count - 1].y > 1e30f) return 2;
+    }
+    long t1 = pe_now_us();
+    long compute_us = t1 - t0;
+
+    /* timing tier 2: image rendering, single pass */
+    PeCanvas cv;
+    pe_canvas_init(&cv, -0.5f, -0.5f, 2.5f, 2.5f);
+    long t2 = pe_now_us();
+    for (int i = 0; i < s.count; i++) {
+        float x0, y0, x1, y1;
+        bone_segment(&s, i, &x0, &y0, &x1, &y1);
+        pe_line(&cv, x0, y0, x1, y1, 40, 90, 180);
+    }
+    for (int i = 0; i < s.count; i++)
+        pe_circle(&cv, s.world[i].x, s.world[i].y, 0.06f, 200, 60, 60);
+    long t3 = pe_now_us();
+    long render_us = t3 - t2;
+
+    char ppm_path[600], json_path[600];
+    snprintf(ppm_path, sizeof(ppm_path), "%s/pose.ppm", outdir);
+    snprintf(json_path, sizeof(json_path), "%s/pose.json", outdir);
+    if (pe_canvas_save(&cv, ppm_path) != 0) return 2;
+
+    char hash[65];
+    if (pe_sha256_file(ppm_path, hash) != 0) return 2;
+
+    FILE* f = fopen(json_path, "wb");
+    if (!f) return 2;
+    fprintf(f, "{\n");
+    fprintf(f, "  \"module\": \"skeleton\",\n");
+    fprintf(f, "  \"format_version\": %d,\n", POSE_FORMAT_VERSION);
+    fprintf(f, "  \"pose\": {\n");
+    fprintf(f, "    \"bone_count\": %d,\n", s.count);
+    fprintf(f, "    \"bones\": [\n");
+    for (int i = 0; i < s.count; i++) {
+        float x0, y0, x1, y1;
+        bone_segment(&s, i, &x0, &y0, &x1, &y1);
+        fprintf(f,
+                "      {\"index\": %d, \"parent\": %d, \"x\": %.6f, \"y\": %.6f, "
+                "\"ang\": %.6f, \"end_x\": %.6f, \"end_y\": %.6f}%s\n",
+                i, s.parent[i], s.world[i].x, s.world[i].y, s.world[i].ang,
+                x1, y1, i == s.count - 1 ? "" : ",");
+    }
+    fprintf(f, "    ]\n");
+    fprintf(f, "  },\n");
+    fprintf(f, "  \"image\": {\n");
+    fprintf(f, "    \"file\": \"pose.ppm\",\n");
+    fprintf(f, "    \"format\": \"ppm-p6\",\n");
+    fprintf(f, "    \"width\": %d,\n", POSE_CANVAS_W);
+    fprintf(f, "    \"height\": %d,\n", POSE_CANVAS_H);
+    fprintf(f, "    \"sha256\": \"%s\"\n", hash);
+    fprintf(f, "  },\n");
+    fprintf(f, "  \"timing\": {\n");
+    fprintf(f, "    \"compute_pose_us\": %ld,\n", compute_us);
+    fprintf(f, "    \"compute_repeats\": 1000,\n");
+    fprintf(f, "    \"render_image_us\": %ld\n", render_us);
+    fprintf(f, "  },\n");
+    fprintf(f, "  \"reproduce\": ");
+    /* exact command line this binary was invoked with, plus the output dir */
+    fputc('[', f);
+    for (int i = 0; i < argc; i++) {
+        pe_write_json_string(f, argv[i]);
+        fputs(i == argc - 1 ? "" : ", ", f);
+    }
+    fputs("],\n", f);
+    fprintf(f, "  \"reproduce_hint\": \"run the command above from the repository root\"\n");
+    fprintf(f, "}\n");
+    fclose(f);
+    return 0;
+}
+
+int main(int argc, char** argv) {
+    if (strcmp(argc > 1 ? argv[1] : "", "--pose-export") == 0) {
+        if (argc != 3) {
+            fprintf(stderr, "usage: %s --pose-export <outdir>\n", argv[0]);
+            return 2;
+        }
+        return skeleton_pose_export(argv[2], argc, argv);
+    }
+
     Skeleton s;
     skel_init(&s);
     int root = skel_add(&s, -1, 0.0f, 0.0f, 0.0f);

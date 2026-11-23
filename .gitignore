@@ -1,0 +1,6 @@
+# build outputs of each module
+constraint/constraint
+curve/curve
+ik/ik
+path/path
+skeleton/skeleton

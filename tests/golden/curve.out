@@ -1,0 +1,11 @@
+add_first=1
+add_second=1
+clamp_left=1
+clamp_right=1
+mid_monotonic=1
+endpoints_exact=1
+flat_curve=1
+flat_deriv_zero=1
+reject_unsorted=1
+capacity=1
+all_ok=1
