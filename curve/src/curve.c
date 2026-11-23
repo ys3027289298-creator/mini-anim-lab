@@ -4,6 +4,12 @@
 #include <string.h>
 #include <math.h>
 
+#ifndef MAL_MODULE
+#define MAL_MODULE "curve"
+#endif
+#define MAL_TIME_ITERS 1200000L
+#include "../../common/harness.h"
+
 #define MAX_KEYS 16
 
 typedef struct { float t; float v; float tan_in; float tan_out; } Key;
@@ -52,37 +58,93 @@ static float curve_deriv(const Curve* c, float t) {
     return (b - a) / (2 * h);
 }
 
-static int failures = 0;
-static void check(const char* name, int ok) {
-    printf("%s=%d\n", name, ok ? 1 : 0);
-    if (!ok) failures++;
+/* the rise curve from the sampling checks, reused by the evidence paths */
+MAL_UNUSED static void curve_build(Curve* c) {
+    curve_init(c);
+    curve_add(c, 0.0f, 0.0f, 0.0f, 1.0f);
+    curve_add(c, 1.0f, 1.0f, 1.0f, 0.0f);
 }
 
-int main(void) {
+static void run_checks(void) {
     Curve c;
     curve_init(&c);
-    check("add_first", curve_add(&c, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
-    check("add_second", curve_add(&c, 1.0f, 1.0f, 1.0f, 0.0f) == 1);
-    check("clamp_left", fabsf(curve_eval(&c, -1.0f)) < 1e-6f);
-    check("clamp_right", fabsf(curve_eval(&c, 2.0f) - 1.0f) < 1e-6f);
-    check("mid_monotonic", curve_eval(&c, 0.5f) > 0.0f && curve_eval(&c, 0.5f) < 1.0f);
-    check("endpoints_exact", fabsf(curve_eval(&c, 0.0f)) < 1e-6f && fabsf(curve_eval(&c, 1.0f) - 1.0f) < 1e-6f);
+    mal_check("add_first", curve_add(&c, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+    mal_check("add_second", curve_add(&c, 1.0f, 1.0f, 1.0f, 0.0f) == 1);
+    mal_check("clamp_left", fabsf(curve_eval(&c, -1.0f)) < 1e-6f);
+    mal_check("clamp_right", fabsf(curve_eval(&c, 2.0f) - 1.0f) < 1e-6f);
+    mal_check("mid_monotonic", curve_eval(&c, 0.5f) > 0.0f && curve_eval(&c, 0.5f) < 1.0f);
+    mal_check("endpoints_exact", fabsf(curve_eval(&c, 0.0f)) < 1e-6f && fabsf(curve_eval(&c, 1.0f) - 1.0f) < 1e-6f);
 
     Curve flat;
     curve_init(&flat);
     curve_add(&flat, 0.0f, 0.5f, 0.0f, 0.0f);
     curve_add(&flat, 1.0f, 0.5f, 0.0f, 0.0f);
-    check("flat_curve", fabsf(curve_eval(&flat, 0.5f) - 0.5f) < 1e-5f);
-    check("flat_deriv_zero", fabsf(curve_deriv(&flat, 0.5f)) < 1e-3f);
+    mal_check("flat_curve", fabsf(curve_eval(&flat, 0.5f) - 0.5f) < 1e-5f);
+    mal_check("flat_deriv_zero", fabsf(curve_deriv(&flat, 0.5f)) < 1e-3f);
 
-    check("reject_unsorted", curve_add(&flat, 0.5f, 1.0f, 0, 0) == -1);
+    mal_check("reject_unsorted", curve_add(&flat, 0.5f, 1.0f, 0, 0) == -1);
 
     Curve full;
     curve_init(&full);
     int rc = 0;
     for (int i = 0; i <= MAX_KEYS; i++) rc = curve_add(&full, (float)i, (float)i, 0, 0);
-    check("capacity", rc == -1 && full.count == MAX_KEYS);
+    mal_check("capacity", rc == -1 && full.count == MAX_KEYS);
+}
 
-    printf("all_ok=%d\n", failures == 0);
-    return failures == 0 ? 0 : 1;
+int main(void) {
+    run_checks();
+
+#ifdef MAL_EVIDENCE_POSE
+    if (mal_failures == 0) {
+        Curve c;
+        curve_build(&c);
+        mal_pose("keys", c.count);
+        for (int i = 0; i <= 8; i++) {
+            char k[16];
+            snprintf(k, sizeof k, "t%d", i);
+            mal_pose(k, curve_eval(&c, (float)i / 8.0f));
+        }
+        mal_pose("deriv_050", curve_deriv(&c, 0.5f));
+        mal_pose("clamp_lo", curve_eval(&c, -1.0f));
+        mal_pose("clamp_hi", curve_eval(&c, 2.0f));
+        mal_emit_pose();
+    }
+#endif
+
+#ifdef MAL_EVIDENCE_IMAGE
+    if (mal_failures == 0) {
+        MalImage im;
+        Curve c;
+        curve_build(&c);
+        mal_img_clear(&im);
+        double px = 0.0, py = 0.0;
+        for (int i = 0; i <= 256; i++) {
+            double t = (double)i / 256.0;
+            double x = 16.0 + t * 96.0;
+            double y = 112.0 - curve_eval(&c, (float)t) * 96.0;
+            if (i > 0) mal_img_line(&im, px, py, x, y, 255, 180, 90);
+            px = x; py = y;
+        }
+        mal_emit_png(&im, MAL_MODULE);
+    }
+#endif
+
+#ifdef MAL_EVIDENCE_TIMING
+    if (mal_failures == 0) {
+        Curve c;
+        curve_build(&c);
+        double acc = 0.0;
+        double t0 = mal_now();
+        for (long it = 0; it < MAL_TIME_ITERS; it++) {
+            float t = (float)(it % 1000) / 1000.0f;
+            acc += curve_eval(&c, t) + curve_deriv(&c, t);
+        }
+        double t1 = mal_now();
+        if (!isfinite(acc)) mal_check("time_finite", 0);
+        mal_emit_time(MAL_TIME_TIER, t1 - t0, MAL_TIME_ITERS);
+    }
+#endif
+
+    printf("all_ok=%d\n", mal_failures == 0);
+    return mal_failures == 0 ? 0 : 1;
 }

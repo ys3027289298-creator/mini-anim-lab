@@ -4,10 +4,16 @@
 #include <string.h>
 #include <math.h>
 
+#ifndef MAL_MODULE
+#define MAL_MODULE "skeleton"
+#endif
+#define MAL_TIME_ITERS 600000L
+#include "../../common/harness.h"
+
 #define MAX_BONES 16
 
 typedef struct { float x, y; float ang; } BoneLocal;
-typedef struct { float x, y, ang; } BoneWorld;
+typedef struct { float x, y; float ang; } BoneWorld;
 
 typedef struct {
     int parent[MAX_BONES];
@@ -57,40 +63,109 @@ static void bone_segment(const Skeleton* s, int i, float* x0, float* y0, float* 
     *x1 = s->world[i].x + rx; *y1 = s->world[i].y + ry;
 }
 
-static int failures = 0;
-static void check(const char* name, int ok) {
-    printf("%s=%d\n", name, ok ? 1 : 0);
-    if (!ok) failures++;
+/* three-bone chain folded 90 degrees at the root, the pose used by the
+   rotate_chain check; shared by the evidence paths below. */
+MAL_UNUSED static void skel_build_pose(Skeleton* s) {
+    skel_init(s);
+    int root = skel_add(s, -1, 0.0f, 0.0f, 0.0f);
+    int b1 = skel_add(s, root, 1.0f, 0.0f, 0.0f);
+    skel_add(s, b1, 1.0f, 0.0f, 0.0f);
+    s->local[root].ang = 1.5707963f;
+    skel_update(s);
 }
 
-int main(void) {
+static void run_checks(void) {
     Skeleton s;
     skel_init(&s);
     int root = skel_add(&s, -1, 0.0f, 0.0f, 0.0f);
     int b1 = skel_add(&s, root, 1.0f, 0.0f, 0.0f);
     int b2 = skel_add(&s, b1, 1.0f, 0.0f, 0.0f);
-    check("add_root", root == 0);
-    check("add_child", b1 == 1 && b2 == 2);
+    mal_check("add_root", root == 0);
+    mal_check("add_child", b1 == 1 && b2 == 2);
 
     skel_update(&s);
-    check("world_chain", fabsf(s.world[2].x - 2.0f) < 1e-5f && fabsf(s.world[2].y) < 1e-5f);
+    mal_check("world_chain", fabsf(s.world[2].x - 2.0f) < 1e-5f && fabsf(s.world[2].y) < 1e-5f);
 
     s.local[root].ang = 1.5707963f;   /* 90 deg */
     skel_update(&s);
-    check("rotate_chain", fabsf(s.world[2].y - 2.0f) < 1e-4f && fabsf(s.world[2].x) < 1e-4f);
+    mal_check("rotate_chain", fabsf(s.world[2].y - 2.0f) < 1e-4f && fabsf(s.world[2].x) < 1e-4f);
 
     float x0, y0, x1, y1;
     bone_segment(&s, b1, &x0, &y0, &x1, &y1);
-    check("segment_dir", fabsf(x1 - x0) < 1e-4f && fabsf(y1 - y0 - 1.0f) < 1e-4f);
+    mal_check("segment_dir", fabsf(x1 - x0) < 1e-4f && fabsf(y1 - y0 - 1.0f) < 1e-4f);
 
-    check("reject_bad_parent", skel_add(&s, 9, 0, 0, 0) == -1);
+    mal_check("reject_bad_parent", skel_add(&s, 9, 0, 0, 0) == -1);
 
     Skeleton full;
     skel_init(&full);
     int last = -1, rc = 0;
     for (int i = 0; i <= MAX_BONES; i++) { rc = skel_add(&full, last, 1, 0, 0); if (rc >= 0) last = rc; }
-    check("capacity", rc == -1 && full.count == MAX_BONES);
+    mal_check("capacity", rc == -1 && full.count == MAX_BONES);
+}
 
-    printf("all_ok=%d\n", failures == 0);
-    return failures == 0 ? 0 : 1;
+int main(void) {
+    run_checks();
+
+#ifdef MAL_EVIDENCE_POSE
+    if (mal_failures == 0) {
+        Skeleton s;
+        skel_build_pose(&s);
+        mal_pose("bones", s.count);
+        for (int i = 0; i < s.count; i++) {
+            char k[24];
+            snprintf(k, sizeof k, "w%d_x", i);   mal_pose(k, s.world[i].x);
+            snprintf(k, sizeof k, "w%d_y", i);   mal_pose(k, s.world[i].y);
+            snprintf(k, sizeof k, "w%d_ang", i); mal_pose(k, s.world[i].ang);
+        }
+        float x0, y0, x1, y1;
+        bone_segment(&s, 1, &x0, &y0, &x1, &y1);
+        mal_pose("seg_x0", x0); mal_pose("seg_y0", y0);
+        mal_pose("seg_x1", x1); mal_pose("seg_y1", y1);
+        mal_emit_pose();
+    }
+#endif
+
+#ifdef MAL_EVIDENCE_IMAGE
+    if (mal_failures == 0) {
+        Skeleton s;
+        MalImage im;
+        skel_build_pose(&s);
+        mal_img_clear(&im);
+        static const unsigned char cols[3][3] = {
+            { 80, 200, 255 }, { 255, 180, 90 }, { 120, 235, 150 }
+        };
+        for (int i = 0; i < s.count; i++) {
+            float x0, y0, x1, y1;
+            bone_segment(&s, i, &x0, &y0, &x1, &y1);
+            mal_img_line(&im, 64.0 + x0 * 40.0, 110.0 - y0 * 40.0,
+                         64.0 + x1 * 40.0, 110.0 - y1 * 40.0,
+                         cols[i % 3][0], cols[i % 3][1], cols[i % 3][2]);
+        }
+        mal_emit_png(&im, MAL_MODULE);
+    }
+#endif
+
+#ifdef MAL_EVIDENCE_TIMING
+    if (mal_failures == 0) {
+        Skeleton s;
+        skel_build_pose(&s);
+        double acc = 0.0;
+        double t0 = mal_now();
+        for (long it = 0; it < MAL_TIME_ITERS; it++) {
+            s.local[0].ang = 1.5707963f * (float)(it % 7) / 7.0f;
+            skel_update(&s);
+            for (int i = 0; i < s.count; i++) {
+                float x0, y0, x1, y1;
+                bone_segment(&s, i, &x0, &y0, &x1, &y1);
+                acc += x1 + y1 + 0.5f * (x0 + y0);
+            }
+        }
+        double t1 = mal_now();
+        if (!isfinite(acc)) { mal_check("time_finite", 0); }
+        mal_emit_time(MAL_TIME_TIER, t1 - t0, MAL_TIME_ITERS);
+    }
+#endif
+
+    printf("all_ok=%d\n", mal_failures == 0);
+    return mal_failures == 0 ? 0 : 1;
 }

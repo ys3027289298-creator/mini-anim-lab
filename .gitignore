@@ -1,0 +1,9 @@
+artifacts/build/
+artifacts/selfcheck.json
+artifacts/selfcheck.txt
+*/skeleton
+*/ik
+*/curve
+*/constraint
+*/path
+*/selfcheck
