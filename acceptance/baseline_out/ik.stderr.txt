@@ -1,0 +1,12 @@
+src/ik.c: In function ‘solve_two_bone’:
+src/ik.c:22:5: warning: implicit declaration of function ‘memset’ [-Wimplicit-function-declaration]
+   22 |     memset(&r, 0, sizeof(r));
+      |     ^~~~~~
+src/ik.c:5:1: note: include ‘<string.h>’ or provide a declaration of ‘memset’
+    4 | #include <math.h>
+  +++ |+#include <string.h>
+    5 | 
+src/ik.c:22:5: warning: incompatible implicit declaration of built-in function ‘memset’ [-Wbuiltin-declaration-mismatch]
+   22 |     memset(&r, 0, sizeof(r));
+      |     ^~~~~~
+src/ik.c:22:5: note: include ‘<string.h>’ or provide a declaration of ‘memset’

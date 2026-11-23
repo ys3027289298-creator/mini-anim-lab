@@ -1,0 +1,21 @@
+# Build artifacts
+/skeleton/skeleton
+/ik/ik
+/curve/curve
+/path/path
+/constraint/constraint
+/pose/pose
+/acceptance/invalid
+/acceptance/bench/bench_skeleton
+/acceptance/bench/bench_ik
+/acceptance/bench/bench_curve
+/acceptance/bench/bench_constraint
+/acceptance/reference/ref_skeleton
+/acceptance/reference/ref_ik
+/acceptance/reference/ref_curve
+/acceptance/reference/ref_constraint
+
+# Generated run outputs (archived baseline_* is intentionally kept)
+/acceptance/legacy_out/
+/acceptance/unified_out/
+/acceptance/results/

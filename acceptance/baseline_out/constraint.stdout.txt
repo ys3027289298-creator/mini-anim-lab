@@ -1,0 +1,7 @@
+init_len=1
+stays_in_stretch=1
+pinned_anchor=1
+falls_down=1
+more_iters_better=1
+capacity_ok=1
+all_ok=1
