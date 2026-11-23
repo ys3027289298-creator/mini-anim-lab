@@ -6,8 +6,11 @@ all: skeleton
 skeleton: src/skeleton.c
 	$(CC) $(CFLAGS) $< -o $@ -lm
 
+ARTIFACT_DIR ?= $(CURDIR)/../artifacts/run_skeleton
+
 test: skeleton
-	./skeleton
+	mkdir -p $(ARTIFACT_DIR)
+	ARTIFACT_DIR=$(ARTIFACT_DIR) ./skeleton
 
 clean:
 	rm -f skeleton
