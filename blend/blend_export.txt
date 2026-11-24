@@ -1,0 +1,29 @@
+# collapsed pose vs hand-keyed reference
+frame 17 offset 0.2000
+node 0 cur 0.0000 0.0000 ref 0.0000 0.0000 dev 0.0000
+node 1 cur 0.7542 0.2668 ref 0.9428 0.3335 dev 0.2000
+node 2 cur 1.3185 1.0553 ref 1.4746 1.1803 dev 0.2000
+frame 18 offset 0.4000
+node 0 cur 0.0000 0.0000 ref 0.0000 0.0000 dev 0.0000
+node 1 cur 0.5615 0.2114 ref 0.9359 0.3523 dev 0.4000
+node 2 cur 1.1362 0.9570 ref 1.4421 1.2147 dev 0.4000
+frame 19 offset 0.6000
+node 0 cur 0.0000 0.0000 ref 0.0000 0.0000 dev 0.0000
+node 1 cur 0.3715 0.1484 ref 0.9287 0.3709 dev 0.6000
+node 2 cur 0.9597 0.8502 ref 1.4088 1.2481 dev 0.6000
+frame 20 offset 0.8000
+node 0 cur 0.0000 0.0000 ref 0.0000 0.0000 dev 0.0000
+node 1 cur 0.1842 0.0779 ref 0.9211 0.3894 dev 0.8000
+node 2 cur 0.7893 0.7353 ref 1.3747 1.2806 dev 0.8000
+frame 21 offset 0.6000
+node 0 cur 0.0000 0.0000 ref 0.0000 0.0000 dev 0.0000
+node 1 cur 0.3652 0.1631 ref 0.9131 0.4078 dev 0.6000
+node 2 cur 0.9111 0.8923 ref 1.3397 1.3122 dev 0.6000
+frame 22 offset 0.4000
+node 0 cur 0.0000 0.0000 ref 0.0000 0.0000 dev 0.0000
+node 1 cur 0.5429 0.2556 ref 0.9048 0.4259 dev 0.4000
+node 2 cur 1.0254 1.0558 ref 1.3041 1.3427 dev 0.4000
+frame 23 offset 0.2000
+node 0 cur 0.0000 0.0000 ref 0.0000 0.0000 dev 0.0000
+node 1 cur 0.7168 0.3552 ref 0.8961 0.4439 dev 0.2000
+node 2 cur 1.1320 1.2254 ref 1.2677 1.3723 dev 0.2000
