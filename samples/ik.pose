@@ -1,0 +1,4 @@
+mal-pose 1
+kind ik
+count 1
+ik root_x=0 root_y=0 target_x=1.39999998 target_y=0.400000006 pole_x=0 pole_y=1 l1=1 l2=1 ok=1 joint_x=0.511660755 joint_y=0.859187543 a1=1.03367972 a2=-0.477080435

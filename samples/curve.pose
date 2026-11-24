@@ -1,0 +1,6 @@
+mal-pose 1
+kind curve
+count 3
+key t=0 v=0 tin=0 tout=1
+key t=0.5 v=0.75 tin=0.400000006 tout=0.200000003
+key t=1 v=1 tin=1 tout=0

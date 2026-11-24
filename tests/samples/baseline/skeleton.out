@@ -1,0 +1,8 @@
+add_root=1
+add_child=1
+world_chain=1
+rotate_chain=1
+segment_dir=1
+reject_bad_parent=1
+capacity=1
+all_ok=1

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
+#include "../../shared/pose_format.h"
 
 #define MAX_PTS 32
 
@@ -94,7 +95,172 @@ static void check(const char* name, int ok) {
     if (!ok) failures++;
 }
 
-int main(void) {
+/* ===================== shared pose format (new) ==========================
+ *
+ * A "meta" record carries the total length, then one "pt" record per
+ * polyline vertex with its cumulative arc length:
+ *
+ *   meta total=7
+ *   pt x=0 y=0 cum=0
+ *   pt x=3 y=0 cum=3
+ *   pt x=3 y=4 cum=7
+ *
+ * Reading it back restores points, the arc-length table and total; the
+ * roundtrip compares all three internal arrays.
+ */
+
+static Path path_pose_build(void) {
+    Path pa;
+    path_init(&pa);
+    path_add(&pa, 0.0f, 0.0f);
+    path_add(&pa, 3.0f, 0.0f);
+    path_add(&pa, 3.0f, 4.0f);
+    return pa;
+}
+
+static int path_export(const Path* pa, const char* file) {
+    FILE* f = fopen(file, "w");
+    if (!f) return -1;
+    pf_write_header(f, "path", pa->n + 1);
+    pf_record_begin(f, "meta");
+    pf_field_float(f, "total", pa->total);
+    pf_record_end(f);
+    for (int i = 0; i < pa->n; i++) {
+        pf_record_begin(f, "pt");
+        pf_field_float(f, "x", pa->p[i].x);
+        pf_field_float(f, "y", pa->p[i].y);
+        pf_field_float(f, "cum", pa->cum[i]);
+        pf_record_end(f);
+    }
+    fclose(f);
+    return 0;
+}
+
+static int path_import(const char* file, Path* pa) {
+    FILE* f = fopen(file, "r");
+    if (!f) return -1;
+
+    int n = 0;
+    if (pf_read_header(f, "path", &n) != 0 || n < 1 || n > MAX_PTS + 1) {
+        fclose(f);
+        return -1;
+    }
+
+    path_init(pa);
+    PfRecord r;
+    if (pf_read_record(f, &r) != 0 || strcmp(r.name, "meta") != 0 ||
+        pf_get_float(&r, "total", &pa->total) != 0) {
+        fclose(f);
+        return -1;
+    }
+    for (int k = 1; k < n; k++) {
+        if (pf_read_record(f, &r) != 0 || strcmp(r.name, "pt") != 0 ||
+            pf_get_float(&r, "x", &pa->p[k - 1].x) != 0 ||
+            pf_get_float(&r, "y", &pa->p[k - 1].y) != 0 ||
+            pf_get_float(&r, "cum", &pa->cum[k - 1]) != 0) {
+            fclose(f);
+            return -1;
+        }
+    }
+    pa->n = n - 1;
+    fclose(f);
+    return 0;
+}
+
+/* ---- legacy path format (pre-unification): two headerless sections -----
+ *
+ *   total <total>
+ *   <x>,<y>,<cum>
+ *   ...
+ */
+
+static int path_export_legacy(const Path* pa, const char* file) {
+    FILE* f = fopen(file, "w");
+    if (!f) return -1;
+    fprintf(f, "total %.9g\n", (double)pa->total);
+    for (int i = 0; i < pa->n; i++)
+        fprintf(f, "%.9g,%.9g,%.9g\n",
+                (double)pa->p[i].x, (double)pa->p[i].y, (double)pa->cum[i]);
+    fclose(f);
+    return 0;
+}
+
+static int path_import_legacy(const char* file, Path* pa) {
+    FILE* f = fopen(file, "r");
+    if (!f) return -1;
+
+    path_init(pa);
+    char line[256];
+    int have_total = 0, ok = 1;
+    while (ok && fgets(line, sizeof line, f)) {
+        char* p = line;
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+        if (*p == '\0' || *p == '#') continue;
+
+        if (strncmp(p, "total", 5) == 0) {
+            if (sscanf(p, "total %f", &pa->total) != 1) { ok = 0; break; }
+            have_total = 1;
+            continue;
+        }
+        float x, y, cum;
+        if (sscanf(p, "%f,%f,%f", &x, &y, &cum) != 3 || pa->n >= MAX_PTS) {
+            ok = 0;
+            break;
+        }
+        pa->p[pa->n].x = x;
+        pa->p[pa->n].y = y;
+        pa->cum[pa->n] = cum;
+        pa->n++;
+    }
+    fclose(f);
+    return (ok && have_total && pa->n > 0) ? 0 : -1;
+}
+
+static int path_same(const Path* a, const Path* b) {
+    if (a->n != b->n || a->total != b->total) return 0;
+    for (int i = 0; i < a->n; i++) {
+        if (a->p[i].x != b->p[i].x || a->p[i].y != b->p[i].y ||
+            a->cum[i] != b->cum[i]) return 0;
+    }
+    return 1;
+}
+
+/* ------------------------------------------------------------ CLI modes */
+
+static int path_cli(int argc, char** argv) {
+    const char* mode = argv[1];
+    Path src = path_pose_build(), back;
+
+    if (strcmp(mode, "--pose-export") == 0 && argc == 3)
+        return path_export(&src, argv[2]) == 0 ? 0 : 1;
+    if (strcmp(mode, "--pose-import") == 0 && argc == 3) {
+        if (path_import(argv[2], &back) != 0) { printf("imported=0\n"); return 1; }
+        printf("imported=1\nn=%d\n", back.n);
+        return 0;
+    }
+    if (strcmp(mode, "--pose-roundtrip") == 0 && argc == 3) {
+        int ok = path_export(&src, argv[2]) == 0 &&
+                 path_import(argv[2], &back) == 0 &&
+                 path_same(&src, &back);
+        printf("roundtrip=%d\n", ok ? 1 : 0);
+        return ok ? 0 : 1;
+    }
+    if (strcmp(mode, "--legacy-export") == 0 && argc == 3)
+        return path_export_legacy(&src, argv[2]) == 0 ? 0 : 1;
+    if (strcmp(mode, "--legacy-check") == 0 && argc == 3) {
+        int ok = path_import_legacy(argv[2], &back) == 0 && path_same(&src, &back);
+        printf("legacy=%d\n", ok ? 1 : 0);
+        return ok ? 0 : 1;
+    }
+
+    fprintf(stderr, "usage: %s [--pose-export|--pose-import|--pose-roundtrip|"
+                    "--legacy-export|--legacy-check] <file>\n", argv[0]);
+    return 2;
+}
+
+int main(int argc, char** argv) {
+    if (argc > 1) return path_cli(argc, argv);
+
     Path pa;
     path_init(&pa);
     check("add0", path_add(&pa, 0, 0) == 0);
